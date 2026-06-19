@@ -1,0 +1,11 @@
+{
+  "Name": "ServerDefault",
+  "Description": "Server-controlled SAIN preset using the default hard baseline.",
+  "Creator": "Server",
+  "SAINVersion": "4.4.3",
+  "SAINPresetVersion": "4.4.0",
+  "DateCreated": "2026-06-19",
+  "BaseSAINDifficulty": "hard",
+  "IsCustom": true,
+  "CanEditName": false
+}
