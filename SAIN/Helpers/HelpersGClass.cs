@@ -136,7 +136,23 @@ public class EFTBotSettings
         WildSpawnType = type;
         foreach (BotDifficulty diff in difficulties)
         {
-            Settings.Add(diff, EFTCore.GetSettings(diff, type, true));
+            Settings.Add(diff, GetSettingsSafe(diff, type));
+        }
+    }
+
+    // EFT's own settings provider only knows about vanilla WildSpawnTypes. For custom
+    // server-defined types it throws, so fall back to the 'assault' defaults instead of
+    // bringing down the whole preset load.
+    private static BotSettingsComponents GetSettingsSafe(BotDifficulty difficulty, WildSpawnType type)
+    {
+        try
+        {
+            return EFTCore.GetSettings(difficulty, type, true);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning($"No EFT default settings for bot type [{type}] ({difficulty}); falling back to [assault]. {ex.Message}");
+            return EFTCore.GetSettings(difficulty, WildSpawnType.assault, true);
         }
     }
 

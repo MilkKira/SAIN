@@ -14,6 +14,10 @@ internal static class PresetHandler
     {
         RemotePresetStore.Initialize();
 
+        // Custom bot types (e.g. server-defined types not present in the client's vanilla
+        // BotTypes set) must be registered before the preset's bot settings are built.
+        BotTypeDefinitions.RegisterServerCustomTypes();
+
         if (!Load.LoadObject(out SAINPresetDefinition definition, Info, PresetsFolder, RemotePresetStore.PresetName))
         {
             throw new InvalidOperationException($"Unable to load server preset '{RemotePresetStore.PresetName}'.");

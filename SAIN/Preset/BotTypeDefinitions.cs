@@ -1,6 +1,9 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using EFT;
+using Newtonsoft.Json;
 using SAIN.Components.BotController;
+using SAIN.Plugin;
 
 namespace SAIN.Preset;
 
@@ -82,6 +85,75 @@ public class BotTypeDefinitions
             BotTypes.Add(botType.WildSpawnType, botType);
             BotTypesList.Add(botType);
             BotTypesNames.Add(botType.Name);
+        }
+    }
+
+    // Minimal projection of a BotSettings group file - we only need the identity
+    // of the bot type, not its full settings graph, to register it.
+    private sealed class BotTypeIdentity
+    {
+        [JsonProperty]
+        public string Name { get; set; }
+
+        [JsonProperty]
+        public WildSpawnType WildSpawnType { get; set; }
+    }
+
+    /// <summary>
+    /// Scans the in-memory server preset for bot types that are not part of the vanilla
+    /// EFT <see cref="WildSpawnType"/> set the client knows about (e.g. custom types like
+    /// "followeruntar" introduced server-side) and registers them. This must run before the
+    /// preset's <c>SAINBotSettingsClass</c> is built, otherwise loading the EFT defaults for an
+    /// unknown type throws.
+    /// </summary>
+    public static void RegisterServerCustomTypes()
+    {
+        if (!RemotePresetStore.IsLoaded || string.IsNullOrEmpty(RemotePresetStore.PresetName))
+        {
+            return;
+        }
+
+        string directory = $"Presets/{RemotePresetStore.PresetName}/BotSettings";
+        foreach (string path in RemotePresetStore.GetFiles(directory, ".json"))
+        {
+            if (!RemotePresetStore.TryGetFile(path, out string json))
+            {
+                continue;
+            }
+
+            BotTypeIdentity identity;
+            try
+            {
+                identity = JsonConvert.DeserializeObject<BotTypeIdentity>(json);
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError($"Failed to read bot type identity from server preset file [{path}]: {ex}");
+                continue;
+            }
+
+            if (identity == null)
+            {
+                continue;
+            }
+
+            WildSpawnType wildSpawnType = identity.WildSpawnType;
+            if (BotTypes.ContainsKey(wildSpawnType))
+            {
+                continue;
+            }
+
+            string name = string.IsNullOrEmpty(identity.Name) ? wildSpawnType.ToString() : identity.Name;
+            AddBotType(
+                new BotType
+                {
+                    WildSpawnType = wildSpawnType,
+                    Name = name,
+                    Section = "Custom",
+                    Description = $"Custom bot type '{name}' defined by the server preset.",
+                }
+            );
+            Logger.LogInfo($"Registered custom server bot type [{name}] ({wildSpawnType}).");
         }
     }
 
