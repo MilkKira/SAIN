@@ -1,9 +1,6 @@
 using System;
 using System.Collections.Generic;
-using System.IO;
-using System.Reflection;
 using Newtonsoft.Json;
-using Newtonsoft.Json.Converters;
 using SAIN.Plugin;
 using SAIN.Preset;
 using SAIN.Preset.GearStealthValues;
@@ -24,59 +21,19 @@ public static class JsonUtility
         { JsonEnum.GlobalSettings, "GlobalSettings" },
     };
 
-    private static readonly JsonSerializerSettings JsonSerializerSettings = new()
-    {
-        Converters = { new StringEnumConverter() },
-        Formatting = Formatting.Indented,
-    };
-
     public const string PresetsFolder = "Presets";
     public const string JsonExtension = ".json";
     public const string Info = "Info";
 
     public static void SaveObjectToJson(object objectToSave, string fileName, params string[] folders)
     {
-        if (objectToSave == null)
-        {
-            return;
-        }
-        if (IsPresetPath(folders))
-        {
-            Logger.LogWarning("Ignored an attempt to write server-controlled preset data.");
-            return;
-        }
-
-        try
-        {
-            if (!GetFoldersPath(out string foldersPath, folders))
-            {
-                Directory.CreateDirectory(foldersPath);
-            }
-
-            var fullPath = Path.Combine(foldersPath, fileName);
-            fullPath = Path.ChangeExtension(fullPath, JsonExtension);
-
-            File.WriteAllText(fullPath, JsonConvert.SerializeObject(objectToSave, JsonSerializerSettings));
-        }
-        catch (Exception e)
-        {
-            Logger.LogError(e);
-        }
+        // Intentionally disabled. Client configuration is read-only and memory-only.
     }
 
     public static bool DoesFileExist(string fileName, params string[] folders)
     {
-        if (TryGetRemotePath(Path.ChangeExtension(fileName, JsonExtension), out string remotePath, folders))
-        {
-            return RemotePresetStore.TryGetFile(remotePath, out _);
-        }
-        if (!GetFoldersPath(out string foldersPath, folders))
-        {
-            return false;
-        }
-        string filePath = Path.Combine(foldersPath, fileName);
-        filePath = Path.ChangeExtension(filePath, JsonExtension);
-        return File.Exists(filePath);
+        return TryGetRemotePath(EnsureJsonExtension(fileName), out string path, folders)
+            && RemotePresetStore.TryGetFile(path, out _);
     }
 
     public static class Load
@@ -84,79 +41,39 @@ public static class JsonUtility
         public static void LoadCustomPresetOptions(List<SAINPresetDefinition> list)
         {
             list.Clear();
-            if (!GetFoldersPath(out string foldersPath, PresetsFolder))
-            {
-                Directory.CreateDirectory(foldersPath);
-            }
-            var array = Directory.GetDirectories(foldersPath);
-            foreach (var item in array)
-            {
-                string path = Path.Combine(item, Info + JsonExtension);
-                if (File.Exists(path))
-                {
-                    string json = File.ReadAllText(path);
-                    var obj = DeserializeObject<SAINPresetDefinition>(json);
-                    if (obj.IsCustom)
-                    {
-                        list.Add(obj);
-                    }
-                }
-                else
-                {
-                    Logger.LogError($"Could not Import Info.json at path [{path}]. Is the file missing?");
-                }
-            }
         }
 
         public static void LoadStealthValues(List<ItemStealthValue> list, params string[] folders)
         {
-            if (IsPresetPath(folders))
+            if (!IsPresetPath(folders))
             {
-                string directory = string.Join("/", folders);
-                foreach (string path in RemotePresetStore.GetFiles(directory, JsonExtension))
+                return;
+            }
+
+            string directory = string.Join("/", folders);
+            foreach (string path in RemotePresetStore.GetFiles(directory, JsonExtension))
+            {
+                if (RemotePresetStore.TryGetFile(path, out string jsonContent))
                 {
-                    if (RemotePresetStore.TryGetFile(path, out string jsonContent))
-                    {
-                        list.Add(JsonConvert.DeserializeObject<ItemStealthValue>(jsonContent));
-                    }
+                    list.Add(JsonConvert.DeserializeObject<ItemStealthValue>(jsonContent));
                 }
-                return;
-            }
-            if (!GetFoldersPath(out string foldersPath, folders))
-            {
-                return;
-            }
-            foreach (var file in Directory.GetFiles(foldersPath, "*.json"))
-            {
-                string jsonContent = File.ReadAllText(file);
-                list.Add(JsonConvert.DeserializeObject<ItemStealthValue>(jsonContent));
             }
         }
 
-        public static T DeserializeObject<T>(string file)
+        public static T DeserializeObject<T>(string json)
         {
-            return JsonConvert.DeserializeObject<T>(file);
+            return JsonConvert.DeserializeObject<T>(json);
         }
 
         public static string LoadTextFile(string fileExtension, string fileName, params string[] folders)
         {
-            if (TryGetRemotePath(fileName + fileExtension, out string remotePath, folders))
+            if (!TryGetRemotePath(fileName + fileExtension, out string path, folders))
             {
-                RemotePresetStore.TryGetFile(remotePath, out string remoteContent);
-                return remoteContent;
+                return null;
             }
-            if (GetFoldersPath(out string foldersPath, folders))
-            {
-                string filePath = Path.Combine(foldersPath, fileName);
 
-                filePath += fileExtension;
-
-                if (File.Exists(filePath))
-                {
-                    return File.ReadAllText(filePath);
-                }
-            }
-            return null;
+            RemotePresetStore.TryGetFile(path, out string content);
+            return content;
         }
 
         public static bool LoadJsonFile(out string json, string fileName, params string[] folders)
@@ -177,6 +94,7 @@ public static class JsonUtility
                 }
             }
             catch (JsonSerializationException) { }
+
             obj = default;
             return false;
         }
@@ -184,60 +102,34 @@ public static class JsonUtility
 
     public static void DeletePreset(SAINPresetDefinition preset)
     {
-        Logger.LogWarning("Preset deletion is disabled. SAIN configuration is controlled by the server.");
-    }
-
-    private static void CheckCreateFolder(string path)
-    {
-        if (!Directory.Exists(path))
-        {
-            Directory.CreateDirectory(path);
-        }
+        // Intentionally disabled.
     }
 
     public static void CreateFolder(params string[] subFolders)
     {
-        if (IsPresetPath(subFolders))
-        {
-            return;
-        }
-        string path = GetPath(subFolders);
-        CheckCreateFolder(path);
+        // Intentionally disabled.
     }
 
     public static bool DoesFolderExist(params string[] subFolders)
     {
-        if (IsPresetPath(subFolders))
+        if (!RemotePresetStore.IsLoaded || !IsPresetPath(subFolders))
         {
-            using var enumerator = RemotePresetStore.GetFiles(string.Join("/", subFolders), JsonExtension).GetEnumerator();
-            return enumerator.MoveNext();
+            return false;
         }
-        string path = GetPath(subFolders);
-        return Directory.Exists(path);
+
+        using var enumerator = RemotePresetStore.GetFiles(string.Join("/", subFolders), JsonExtension).GetEnumerator();
+        return enumerator.MoveNext();
     }
 
     public static bool GetFoldersPath(out string path, params string[] folders)
     {
-        path = GetPath(folders);
-        return Directory.Exists(path);
-    }
-
-    private static string GetPath(params string[] folders)
-    {
-        string path = GetSAINPluginPath();
-        for (int i = 0; i < folders.Length; i++)
-        {
-            path = Path.Combine(path, folders[i]);
-        }
-        return path;
+        path = null;
+        return false;
     }
 
     public static string GetSAINPluginPath()
     {
-        string pluginFolder = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
-        //var path = Path.Combine(pluginFolder, nameof(SAIN));
-        CheckCreateFolder(pluginFolder);
-        return pluginFolder;
+        return null;
     }
 
     private static bool IsPresetPath(string[] folders)
@@ -257,5 +149,12 @@ public static class JsonUtility
 
         path = string.Join("/", folders) + "/" + fileName;
         return true;
+    }
+
+    private static string EnsureJsonExtension(string fileName)
+    {
+        return fileName.EndsWith(JsonExtension, StringComparison.OrdinalIgnoreCase)
+            ? fileName
+            : fileName + JsonExtension;
     }
 }

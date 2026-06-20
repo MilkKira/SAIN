@@ -274,6 +274,11 @@ public class SAINBotSettingsClass : BasePreset
 
     public void LoadEFTSettings()
     {
+        if (EFTSettings.Count > 0)
+        {
+            return;
+        }
+
         BotDifficulty[] Difficulties = EnumValues.Difficulties;
         foreach (var BotType in BotTypeDefinitions.BotTypesList)
         {
@@ -282,16 +287,12 @@ public class SAINBotSettingsClass : BasePreset
 
             if (!EFTSettings.ContainsKey(wildSpawnType))
             {
-                if (!Load.LoadObject(out EFTBotSettings eftSettings, name, "Default Bot Config Values"))
-                {
-                    Logger.LogError($"Failed to Import EFT Bot Settings for {name}");
-                    eftSettings = new EFTBotSettings(name, wildSpawnType, Difficulties);
-                    SaveObjectToJson(eftSettings, name, "Default Bot Config Values");
-                }
-
+                var eftSettings = new EFTBotSettings(name, wildSpawnType, Difficulties);
                 EFTSettings.Add(wildSpawnType, eftSettings);
             }
         }
+
+        Logger.LogInfo($"Initialized {EFTSettings.Count} EFT bot default groups in memory.");
     }
 
     public SAINSettingsClass GetSAINSettings(WildSpawnType type, BotDifficulty difficulty)

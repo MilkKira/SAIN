@@ -1,8 +1,6 @@
 ﻿using System.Collections.Generic;
 using EFT;
-using Newtonsoft.Json;
 using SAIN.Components.BotController;
-using SAIN.Helpers;
 
 namespace SAIN.Preset;
 
@@ -35,76 +33,11 @@ public class BotTypeDefinitions
         }
     }
 
-    private static readonly string FileName = "BotTypes";
-
     public static List<BotType> ImportBotTypes()
     {
         List<BotType> defaultList = CreateBotTypes();
         removeExcluded(defaultList, out _);
-
-        if (JsonUtility.Load.LoadObject(out List<BotType> importedList, FileName))
-        {
-            // Check that the imported list contains each entry created, to account for BotTypes being added with newer versions of EFT
-            CheckImportedList(importedList, defaultList);
-            return importedList;
-        }
-        else
-        {
-            JsonUtility.SaveObjectToJson(defaultList, FileName);
-            return defaultList;
-        }
-    }
-
-    private static void CheckImportedList(List<BotType> importedList, List<BotType> defaultList)
-    {
-        bool modified = false;
-
-        // Remove items from importedList that no longer exist in defaultList
-        for (int i = importedList.Count - 1; i >= 0; i--)
-        {
-            bool existsInDefault = false;
-            for (int j = 0; j < defaultList.Count; j++)
-            {
-                if (importedList[i].WildSpawnType == defaultList[j].WildSpawnType)
-                {
-                    existsInDefault = true;
-                    break;
-                }
-            }
-
-            if (!existsInDefault)
-            {
-                importedList.RemoveAt(i);
-                modified = true;
-            }
-        }
-
-        // Add items from defaultList that don't exist in importedList
-        for (int i = 0; i < defaultList.Count; i++)
-        {
-            bool alreadyExists = false;
-            for (int j = 0; j < importedList.Count; j++)
-            {
-                if (defaultList[i].WildSpawnType == importedList[j].WildSpawnType)
-                {
-                    alreadyExists = true;
-                    break;
-                }
-            }
-
-            if (!alreadyExists)
-            {
-                importedList.Add(defaultList[i]);
-                modified = true;
-            }
-        }
-
-        removeExcluded(importedList, out bool removed);
-
-        if (removed || modified)
-        {
-            JsonUtility.SaveObjectToJson(importedList, FileName);
-        }
+        return defaultList;
     }
 
     private static void removeExcluded(List<BotType> list, out bool removed)
@@ -124,7 +57,7 @@ public class BotTypeDefinitions
 
     public static void ExportBotTypes()
     {
-        JsonUtility.SaveObjectToJson(BotTypesList, FileName);
+        // Client configuration is read-only.
     }
 
     public static BotType GetBotType(WildSpawnType wildSpawnType)
