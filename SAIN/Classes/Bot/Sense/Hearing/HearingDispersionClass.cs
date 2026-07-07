@@ -31,18 +31,27 @@ public class HearingDispersionClass(SAINHearingSensorClass hearing) : BotSubClas
 
     public Vector3 CalcRandomizedPosition(AISoundData Sound, float addDispersion)
     {
-        EnemyPlace enemyLastKnown = Sound.Enemy.KnownPlaces.LastKnownPlace;
-        float distanceFromLastKnown = enemyLastKnown != null ? enemyLastKnown.DistanceToEnemyRealPosition : float.MaxValue;
+        Enemy enemy = Sound.Enemy;
+        if (enemy == null)
+        {
+            return Sound.Position;
+        }
+
+        EnemyPlace enemyLastKnown = enemy.KnownPlaces?.LastKnownPlace;
+        Vector3 referencePosition = enemyLastKnown?.Position ?? Sound.Position;
+        float distanceFromLastKnown = enemyLastKnown != null
+            ? enemyLastKnown.DistanceToEnemyRealPosition
+            : Vector3.Distance(referencePosition, enemy.EnemyPosition);
 
         // 极近：完全相信位置，直接返回
         if (distanceFromLastKnown <= MIN_DISTANCE_LAST_KNOWN_NO_RANDOMIZATION)
         {
-            return enemyLastKnown.Position;
+            return referencePosition;
         }
 
-        // 1. 计算基础方向：从 Bot 指向最后已知位置
+        // 1. 计算基础方向：从 Bot 指向参考位置
         Vector3 botPos = Bot.Position;
-        Vector3 directionToLastKnown = (enemyLastKnown.Position - botPos).normalized;
+        Vector3 directionToLastKnown = (referencePosition - botPos).normalized;
 
         // 2. 根据距离映射角度误差标准差
         float distClamped = Mathf.Clamp(distanceFromLastKnown, MIN_DISTANCE_LAST_KNOWN_NO_RANDOMIZATION, MAX_DISTANCE_LASTKNOWN_REDUCE_RANDOM);
@@ -50,7 +59,7 @@ public class HearingDispersionClass(SAINHearingSensorClass hearing) : BotSubClas
         float angleStdDev = Mathf.Lerp(MIN_ANGLE_ERROR, MAX_ANGLE_ERROR, ratio);
 
         // 3. 加入原有 dispersionMod 影响（敌人是否在视野中心）
-        float dispersionMod = getDispersionModifier(Sound.Enemy);
+        float dispersionMod = getDispersionModifier(enemy);
         angleStdDev *= dispersionMod;
 
         // 【削弱】角度误差标准差放大 15%
@@ -65,8 +74,8 @@ public class HearingDispersionClass(SAINHearingSensorClass hearing) : BotSubClas
         Quaternion rotation = Quaternion.Euler(0f, angleOffset, 0f);
         Vector3 estimatedDirection = rotation * directionToLastKnown;
 
-        // 6. 距离估计：真实距离 + 高斯噪声 + lastKnownDistCoef 的影响（保持原有系数语义）
-        float actualDist = Vector3.Distance(botPos, enemyLastKnown.Position);
+        // 6. 距离估计：参考距离 + 高斯噪声 + lastKnownDistCoef 的影响（保持原有系数语义）
+        float actualDist = Vector3.Distance(botPos, referencePosition);
         float lastKnownDistCoef = 1f;
         if (distanceFromLastKnown < MAX_DISTANCE_LASTKNOWN_REDUCE_RANDOM)
         {
@@ -95,20 +104,12 @@ public class HearingDispersionClass(SAINHearingSensorClass hearing) : BotSubClas
             return result;
         }
 
-        // 降级方案：找不到则退回最后已知位置
-        if (enemyLastKnown != null)
-        {
+        // 降级方案：找不到则退回参考位置
 #if DEBUG
-            if (SAINPlugin.DebugMode)
-                Logger.LogWarning($"[{Bot.name}] Failed to find reachable point near estimated pos for Enemy [{Sound.Enemy.Player.name}], fallback to last known.");
+        if (SAINPlugin.DebugMode)
+            Logger.LogWarning($"[{Bot.name}] Failed to find reachable point near estimated pos for Enemy [{enemy.Player.name}], fallback to reference position.");
 #endif
-            return enemyLastKnown.Position;
-        }
-
-#if DEBUG
-        Logger.LogWarning($"[{Bot.name}] Completely failed to find point for [{Sound.Enemy.Player.name}], using real position.");
-#endif
-        return Sound.Enemy.EnemyPosition;
+        return referencePosition;
     }
 
     /// <summary>
